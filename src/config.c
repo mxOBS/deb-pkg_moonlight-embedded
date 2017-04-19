@@ -1,7 +1,7 @@
 /*
  * This file is part of Moonlight Embedded.
  *
- * Copyright (C) 2015 Iwan Timmer
+ * Copyright (C) 2015, 2016 Iwan Timmer
  *
  * Moonlight is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,6 +38,7 @@
 
 bool inputAdded = false;
 static bool mapped = true;
+const char* audio_device = NULL;
 
 static struct option long_options[] = {
   {"720", no_argument, NULL, 'a'},
@@ -59,8 +60,13 @@ static struct option long_options[] = {
   {"save", required_argument, NULL, 'q'},
   {"keydir", required_argument, NULL, 'r'},
   {"remote", no_argument, NULL, 's'},
-  {"fullscreen", no_argument, NULL, 't'},
+  {"windowed", no_argument, NULL, 't'},
   {"surround", no_argument, NULL, 'u'},
+  {"fps", required_argument, NULL, 'v'},
+  {"forcehw", no_argument, NULL, 'w'},
+  {"hevc", no_argument, NULL, 'x'},
+  {"h264", no_argument, NULL, 'z'},
+  {"unsupported", no_argument, NULL, 'y'},
   {0, 0, 0, 0},
 };
 
@@ -187,10 +193,25 @@ static void parse_argument(int c, char* value, PCONFIGURATION config) {
     config->stream.streamingRemotely = 1;
     break;
   case 't':
-    config->fullscreen = true;
+    config->fullscreen = false;
     break;
   case 'u':
     config->stream.audioConfiguration = AUDIO_CONFIGURATION_51_SURROUND;
+    break;
+  case 'v':
+    config->stream.fps = atoi(value);
+    break;
+  case 'w':
+    config->forcehw = true;
+    break;
+  case 'x':
+    config->codec = CODEC_HEVC;
+    break;
+  case 'z':
+    config->codec = CODEC_H264;
+    break;
+  case 'y':
+    config->unsupported_version = true;
     break;
   case 1:
     if (config->action == NULL)
@@ -273,6 +294,7 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
   config->stream.packetSize = 1024;
   config->stream.streamingRemotely = 0;
   config->stream.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
+  config->stream.supportsHevc = false;
 
   config->platform = "default";
   config->app = "Steam";
@@ -281,6 +303,10 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
   config->config_file = NULL;
   config->sops = true;
   config->localaudio = false;
+  config->fullscreen = true;
+  config->unsupported_version = false;
+  config->forcehw = false;
+  config->codec = CODEC_UNSPECIFIED;
 
   config->inputsCount = 0;
   config->mapping = get_path("mappings/default.conf", getenv("XDG_DATA_DIRS"));
@@ -298,7 +324,7 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
   } else {
     int option_index = 0;
     int c;
-    while ((c = getopt_long_only(argc, argv, "-abc:d:efg:h:i:j:k:lm:no:p:q:r:s", long_options, &option_index)) != -1) {
+    while ((c = getopt_long_only(argc, argv, "-abc:d:efg:h:i:j:k:lm:no:p:q:r:stuv:w:xy", long_options, &option_index)) != -1) {
       parse_argument(c, optarg, config);
     }
   }

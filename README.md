@@ -3,18 +3,11 @@
 Moonlight Embedded is an open source implementation of NVIDIA's GameStream, as used by the NVIDIA Shield, but built for Linux.
 
 Moonlight Embedded allows you to stream your full collection of Steam games from
-your powerful Windows desktop to your (embedded) Linux system, like Raspberry Pi, CuBox-i and Hummingboard.
+your powerful Windows desktop to your (embedded) Linux system, like Raspberry Pi, CuBox-i and ODROID.
 
 ## Documentation
 
 More information about installing and runnning Moonlight Embedded is available on the [wiki](https://github.com/irtimmer/moonlight-embedded/wiki).
-
-## Features
-
-* Streams Steam and all of your games from your PC to your embedded system.
-* Use mDNS to scan for compatible GeForce Experience (GFE) machines on the network.
-* Qwerty Keyboard, Mouse and Gamepad support
-* Support hardware video decoding on Raspberry Pi and i.MX 6 devices
 
 ## Requirements
 
@@ -31,7 +24,17 @@ More information about installing and runnning Moonlight Embedded is available o
 * Connect to the GFE Server with Moonlight Embedded
 * Play games!
 
+## Donations
+
+Donations are welcome and will be used to buy new test hardware.
+
+- Bitcoin [1DgheY9CkQhzwgtjaoYpGSudaMzck1swDp](bitcoin:1DgheY9CkQhzwgtjaoYpGSudaMzck1swDp)
+- [PayPal](https://www.paypal.me/itimmer)
+- [Flattr](https://flattr.com/submit/auto?fid=lz111v&url=https%3A%2F%2Fgithub.com%2Firtimmer%2Fmoonlight-embedded)
+
 ## Bugs
+
+Please check the fora, wiki and old bug reports before submitting a new bug report.
 
 Bugs can be reported to the [issue tracker](https://github.com/irtimmer/moonlight-embedded/issues).
 
@@ -44,9 +47,10 @@ different C implementations of Moonlight
 
 ## Discussion
 
-[XDA](http://forum.xda-developers.com/showthread.php?t=2505510)  
-[Raspberry Pi Forum](http://www.raspberrypi.org/forums/viewtopic.php?f=78&t=65878)  
-[SolidRun Community](http://www.solid-run.com/community/viewtopic.php?f=13&t=1489&p=11173)  
+[XDA](http://forum.xda-developers.com/showthread.php?t=2505510) Moonlight in General  
+[Raspberry Pi Forum](http://www.raspberrypi.org/forums/viewtopic.php?f=78&t=65878) Moonlight Embedded for Raspberry Pi  
+[SolidRun Community](http://www.solid-run.com/community/viewtopic.php?f=13&t=1489&p=11173) Moonlight Embedded for Cubox-i and Hummingboard  
+[ODROID Forum](http://forum.odroid.com/viewtopic.php?f=91&t=15456) Moonlight Embedded on ODROID  
 
 ## Contribute
 

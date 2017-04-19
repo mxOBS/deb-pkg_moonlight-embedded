@@ -30,7 +30,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "sps.h"
 
-#include "limelight-common/Limelight.h"
+#include <Limelight.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +38,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <ilclient.h>
 #include <bcm_host.h>
+
+#define MAX_DECODE_UNIT_SIZE 262144
 
 static TUNNEL_T tunnel[2];
 static COMPONENT_T *list[3];
@@ -51,15 +53,18 @@ static unsigned char *dest;
 static int port_settings_changed;
 static int first_packet;
 
-static void decoder_renderer_setup(int width, int height, int redrawRate, void* context, int drFlags) {
+static void decoder_renderer_setup(int videoFormat, int width, int height, int redrawRate, void* context, int drFlags) {
+  if (videoFormat != VIDEO_FORMAT_H264) {
+    fprintf(stderr, "Video format not supported\n");
+    exit(1);
+  }
+
   bcm_host_init();
   gs_sps_init(width, height);
 
   OMX_VIDEO_PARAM_PORTFORMATTYPE format;
   OMX_TIME_CONFIG_CLOCKSTATETYPE cstate;
   COMPONENT_T *clock = NULL;
-  unsigned int data_len = 0;
-  int packet_size = 80<<10;
 
   memset(list, 0, sizeof(list));
   memset(tunnel, 0, sizeof(tunnel));
@@ -109,8 +114,27 @@ static void decoder_renderer_setup(int width, int height, int redrawRate, void* 
   unit.eUnitType = OMX_DataUnitCodedPicture;
   unit.eEncapsulationType = OMX_DataEncapsulationElementaryStream;
 
-  if(OMX_SetParameter(ILC_GET_HANDLE(video_decode), OMX_IndexParamVideoPortFormat, &format) == OMX_ErrorNone &&
-     OMX_SetParameter(ILC_GET_HANDLE(video_decode), OMX_IndexParamBrcmDataUnit, &unit) == OMX_ErrorNone &&
+  if(OMX_SetParameter(ILC_GET_HANDLE(video_decode), OMX_IndexParamVideoPortFormat, &format) != OMX_ErrorNone ||
+     OMX_SetParameter(ILC_GET_HANDLE(video_decode), OMX_IndexParamBrcmDataUnit, &unit) != OMX_ErrorNone) {
+    fprintf(stderr, "Failed to set video parameters\n");
+    exit(EXIT_FAILURE);
+  }
+
+  OMX_PARAM_PORTDEFINITIONTYPE port;
+
+  memset(&port, 0, sizeof(OMX_PARAM_PORTDEFINITIONTYPE));
+  port.nSize = sizeof(OMX_PARAM_PORTDEFINITIONTYPE);
+  port.nVersion.nVersion = OMX_VERSION;
+  port.nPortIndex = 130;
+  if(OMX_GetParameter(ILC_GET_HANDLE(video_decode), OMX_IndexParamPortDefinition, &port) != OMX_ErrorNone) {
+    fprintf(stderr, "Failed to get decoder port definition\n");
+    exit(EXIT_FAILURE);
+  }
+
+  // Increase the buffer size to fit the largest possible frame
+  port.nBufferSize = MAX_DECODE_UNIT_SIZE;
+
+  if(OMX_SetParameter(ILC_GET_HANDLE(video_decode), OMX_IndexParamPortDefinition, &port) == OMX_ErrorNone &&
      ilclient_enable_port_buffers(video_decode, 130, NULL, NULL, NULL) == 0) {
 
     port_settings_changed = 0;

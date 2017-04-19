@@ -22,7 +22,7 @@
 #include "sdlinput.h"
 #include "../sdl.h"
 
-#include "limelight-common/Limelight.h"
+#include <Limelight.h>
 
 #define ACTION_MODIFIERS (MODIFIER_SHIFT|MODIFIER_ALT|MODIFIER_CTRL)
 #define QUIT_KEY SDLK_q
@@ -41,6 +41,7 @@ typedef struct _GAMEPAD_STATE {
 static GAMEPAD_STATE gamepads[4];
 
 static int keyboard_modifiers;
+static int activeGamepadMask = 0;
 
 void sdlinput_init() {
   memset(gamepads, 0, sizeof(gamepads));
@@ -59,14 +60,14 @@ void sdlinput_init() {
 
 static PGAMEPAD_STATE get_gamepad(SDL_JoystickID sdl_id) {
   for (int i = 0;i<4;i++) {
-    if (gamepads[i].sdl_id == sdl_id)
-      return &gamepads[0];
-    else if (!gamepads[i].initialized) {
+    if (!gamepads[i].initialized) {
       gamepads[i].sdl_id = sdl_id;
       gamepads[i].id = i;
       gamepads[i].initialized = true;
-      return &gamepads[0];
-    }
+      activeGamepadMask |= (1 << i);
+      return &gamepads[i];
+    } else if (gamepads[i].sdl_id == sdl_id)
+      return &gamepads[i];
   }
   return &gamepads[0];
 }
@@ -164,7 +165,7 @@ int sdlinput_handle_event(SDL_Event* event) {
     default:
       return SDL_NOTHING;
     }
-    LiSendMultiControllerEvent(gamepad->id, gamepad->buttons, gamepad->leftTrigger, gamepad->rightTrigger, gamepad->leftStickX, gamepad->leftStickY, gamepad->rightStickX, gamepad->rightStickY);
+    LiSendMultiControllerEvent(gamepad->id, activeGamepadMask, gamepad->buttons, gamepad->leftTrigger, gamepad->rightTrigger, gamepad->leftStickX, gamepad->leftStickY, gamepad->rightStickX, gamepad->rightStickY);
     break;
   case SDL_CONTROLLERBUTTONDOWN:
   case SDL_CONTROLLERBUTTONUP:
@@ -223,7 +224,7 @@ int sdlinput_handle_event(SDL_Event* event) {
     else
       gamepad->buttons &= ~button;
 
-    LiSendMultiControllerEvent(gamepad->id, gamepad->buttons, gamepad->leftTrigger, gamepad->rightTrigger, gamepad->leftStickX, gamepad->leftStickY, gamepad->rightStickX, gamepad->rightStickY);
+    LiSendMultiControllerEvent(gamepad->id, activeGamepadMask, gamepad->buttons, gamepad->leftTrigger, gamepad->rightTrigger, gamepad->leftStickX, gamepad->leftStickY, gamepad->rightStickX, gamepad->rightStickY);
     break;
   }
   return SDL_NOTHING;

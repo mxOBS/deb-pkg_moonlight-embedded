@@ -1,7 +1,7 @@
 /*
  * This file is part of Moonlight Embedded.
  *
- * Copyright (C) 2015 Iwan Timmer
+ * Copyright (C) 2015, 2016 Iwan Timmer
  *
  * Moonlight is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,11 +17,13 @@
  * along with Moonlight; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "limelight-common/Limelight.h"
+#include <Limelight.h>
 
 #include <stdbool.h>
 
 #define MAX_INPUTS 6
+
+enum codecs { CODEC_UNSPECIFIED, CODEC_H264, CODEC_HEVC };
 
 struct input_config {
   char* path;
@@ -40,8 +42,11 @@ typedef struct _CONFIGURATION {
   bool sops;
   bool localaudio;
   bool fullscreen;
+  bool forcehw;
+  bool unsupported_version;
   struct input_config inputs[MAX_INPUTS];
   int inputsCount;
+  enum codecs codec;
 } CONFIGURATION, *PCONFIGURATION;
 
 bool inputAdded;

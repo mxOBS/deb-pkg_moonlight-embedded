@@ -19,33 +19,71 @@
 
 #include "ffmpeg.h"
 
+#ifdef HAVE_VDPAU
+#include "ffmpeg_vdpau.h"
+#endif
+
+#include <Limelight.h>
+
 #include <stdlib.h>
 #include <libswscale/swscale.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 // General decoder and renderer state
 static AVPacket pkt;
 static AVCodec* decoder;
 static AVCodecContext* decoder_ctx;
-static AVFrame* dec_frame;
-static struct SwsContext* scaler_ctx;
+static AVFrame** dec_frames;
+
+static int dec_frames_cnt;
+static int current_frame, next_frame;
+
+enum decoders {SOFTWARE, VDPAU};
+enum decoders decoder_system;
 
 #define BYTES_PER_PIXEL 4
 
 // This function must be called before
 // any other decoding functions
-int ffmpeg_init(int width, int height, int perf_lvl, int thread_count) {
+int ffmpeg_init(int videoFormat, int width, int height, int perf_lvl, int buffer_count, int thread_count) {
   // Initialize the avcodec library and register codecs
   av_log_set_level(AV_LOG_QUIET);
   avcodec_register_all();
 
   av_init_packet(&pkt);
 
-  decoder = avcodec_find_decoder(AV_CODEC_ID_H264);
+  #ifdef HAVE_VDPAU
+  if (perf_lvl & HARDWARE_ACCELERATION) {
+    switch (videoFormat) {
+      case VIDEO_FORMAT_H264:
+        decoder = avcodec_find_decoder_by_name("h264_vdpau");
+        break;
+      case VIDEO_FORMAT_H265:
+        decoder = avcodec_find_decoder_by_name("hevc_vdpau");
+        break;
+    }
+
+    if (decoder != NULL)
+      decoder_system = VDPAU;
+  }
+  #endif
+
   if (decoder == NULL) {
-    printf("Couldn't find H264 decoder");
-    return -1;
+    decoder_system = SOFTWARE;
+    switch (videoFormat) {
+      case VIDEO_FORMAT_H264:
+        decoder = avcodec_find_decoder_by_name("h264");
+        break;
+      case VIDEO_FORMAT_H265:
+        decoder = avcodec_find_decoder_by_name("hevc");
+        break;
+    }
+    if (decoder == NULL) {
+      printf("Couldn't find decoder\n");
+      return -1;
+    }
   }
 
   decoder_ctx = avcodec_alloc_context3(decoder);
@@ -71,7 +109,7 @@ int ffmpeg_init(int width, int height, int perf_lvl, int thread_count) {
 
   decoder_ctx->width = width;
   decoder_ctx->height = height;
-  decoder_ctx->pix_fmt = PIX_FMT_YUV420P;
+  decoder_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
 
   int err = avcodec_open2(decoder_ctx, decoder, NULL);
   if (err < 0) {
@@ -79,25 +117,25 @@ int ffmpeg_init(int width, int height, int perf_lvl, int thread_count) {
     return err;
   }
 
-  dec_frame = av_frame_alloc();
-  if (dec_frame == NULL) {
-    printf("Couldn't allocate frame");
+  dec_frames_cnt = buffer_count;
+  dec_frames = malloc(buffer_count * sizeof(AVFrame*));
+  if (dec_frames == NULL) {
+    fprintf(stderr, "Couldn't allocate frames");
     return -1;
   }
-  
-  int filtering;
-  if (perf_lvl & FAST_BILINEAR_FILTERING)
-    filtering = SWS_FAST_BILINEAR;
-  else if (perf_lvl & BILINEAR_FILTERING)
-    filtering = SWS_BILINEAR;
-  else
-    filtering = SWS_BICUBIC;
 
-  scaler_ctx = sws_getContext(decoder_ctx->width, decoder_ctx->height, decoder_ctx->pix_fmt, decoder_ctx->width, decoder_ctx->height, PIX_FMT_YUV420P, filtering, NULL, NULL, NULL);
-  if (scaler_ctx == NULL) {
-    printf("Couldn't get scaler context");
-    return -1;
+  for (int i = 0; i < buffer_count; i++) {
+    dec_frames[i] = av_frame_alloc();
+    if (dec_frames[i] == NULL) {
+      fprintf(stderr, "Couldn't allocate frame");
+      return -1;
+    }
   }
+
+  #ifdef HAVE_VDPAU
+  if (decoder_system == VDPAU)
+    vdpau_init(decoder_ctx, width, height);
+  #endif
 
   return 0;
 }
@@ -110,56 +148,48 @@ void ffmpeg_destroy(void) {
     av_free(decoder_ctx);
     decoder_ctx = NULL;
   }
-  if (scaler_ctx) {
-    sws_freeContext(scaler_ctx);
-    scaler_ctx = NULL;
+  if (dec_frames) {
+    for (int i = 0; i < dec_frames_cnt; i++) {
+      if (dec_frames[i])
+        av_frame_free(&dec_frames[i]);
+    }
   }
-  if (dec_frame) {
-    av_frame_free(&dec_frame);
-    dec_frame = NULL;
-  }
-}
-
-int ffmpeg_draw_frame(AVFrame *pict) {
-  int err = sws_scale(scaler_ctx, (const uint8_t* const*) dec_frame->data, dec_frame->linesize, 0, decoder_ctx->height, pict->data, pict->linesize);
-
-  if (err != decoder_ctx->height) {
-    fprintf(stderr, "Scaling failed\n");
-    return 0;
-  }
-  
-  return 1;
 }
 
 AVFrame* ffmpeg_get_frame() {
-  return dec_frame;
+  int err = avcodec_receive_frame(decoder_ctx, dec_frames[next_frame]);
+  if (err == 0) {
+    current_frame = next_frame;
+    next_frame = (current_frame+1) % dec_frames_cnt;
+
+    if (decoder_system == SOFTWARE)
+      return dec_frames[current_frame];
+    #ifdef HAVE_VDPAU
+    else if (decoder_system == VDPAU)
+      return vdpau_get_frame(dec_frames[current_frame]);
+    #endif
+  } else if (err != AVERROR(EAGAIN)) {
+    char errorstring[512];
+    av_strerror(err, errorstring, sizeof(errorstring));
+    fprintf(stderr, "Receive failed - %d/%s\n", err, errorstring);
+  }
+  return NULL;
 }
 
 // packets must be decoded in order
 // indata must be inlen + FF_INPUT_BUFFER_PADDING_SIZE in length
 int ffmpeg_decode(unsigned char* indata, int inlen) {
   int err;
-  int got_pic = 0;
 
   pkt.data = indata;
   pkt.size = inlen;
 
-  while (pkt.size > 0) {
-    got_pic = 0;
-    err = avcodec_decode_video2(decoder_ctx, dec_frame, &got_pic, &pkt);
-    if (err < 0) {
-      fprintf(stderr, "Decode failed\n");
-      got_pic = 0;
-      break;
-    }
-
-    pkt.size -= err;
-    pkt.data += err;
+  err = avcodec_send_packet(decoder_ctx, &pkt);
+  if (err < 0) {
+    char errorstring[512];
+    av_strerror(err, errorstring, sizeof(errorstring));
+    fprintf(stderr, "Decode failed - %s\n", errorstring);
   }
   
-  if (got_pic) {
-    return 1;
-  }
-
   return err < 0 ? err : 0;
 }

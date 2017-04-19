@@ -1,7 +1,7 @@
 /*
  * This file is part of Moonlight Embedded.
  *
- * Copyright (C) 2015 Iwan Timmer
+ * Copyright (C) 2015-2017 Iwan Timmer
  *
  * Moonlight is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 
 #ifdef HAVE_LIBCEC
 
-#include "limelight-common/Limelight.h"
+#include <Limelight.h>
 
 #include <ceccloader.h>
 
@@ -36,9 +36,9 @@ static char                 g_strPort[50] = { 0 };
 static libcec_interface_t   g_iface;
 static ICECCallbacks        g_callbacks;
 
-static int on_cec_keypress(void* userdata, const cec_keypress key) {
+static void on_cec_keypress(void* userdata, const cec_keypress* key) {
   char value;
-  switch (key.keycode) {
+  switch (key->keycode) {
     case CEC_USER_CONTROL_CODE_UP:
       value = KEY_UP;
       break;
@@ -69,7 +69,7 @@ static int on_cec_keypress(void* userdata, const cec_keypress key) {
   
   if (value != 0) {
     short code = 0x80 << 8 | value;
-    LiSendKeyboardEvent(code, (key.duration > 0)?KEY_ACTION_UP:KEY_ACTION_DOWN, 0);
+    LiSendKeyboardEvent(code, (key->duration > 0)?KEY_ACTION_UP:KEY_ACTION_DOWN, 0);
   }
 }
 
@@ -77,7 +77,7 @@ void cec_init() {
   libcecc_reset_configuration(&g_config);
   g_config.clientVersion = LIBCEC_VERSION_CURRENT;
   g_config.bActivateSource = 0;
-  g_callbacks.CBCecKeyPress = &on_cec_keypress;
+  g_callbacks.keyPress = &on_cec_keypress;
   g_config.callbacks = &g_callbacks;
   snprintf(g_config.strDeviceName, sizeof(g_config.strDeviceName), "Moonlight");
   g_config.callbacks = &g_callbacks;

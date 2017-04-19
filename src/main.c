@@ -1,7 +1,7 @@
 /*
  * This file is part of Moonlight Embedded.
  *
- * Copyright (C) 2015 Iwan Timmer
+ * Copyright (C) 2015, 2016 Iwan Timmer
  *
  * Moonlight is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@
 #include "loop.h"
 #include "client.h"
 #include "connection.h"
+#include "configuration.h"
 #include "audio.h"
 #include "video.h"
 #include "discover.h"
@@ -32,7 +33,7 @@
 #include "input/cec.h"
 #include "input/sdlinput.h"
 
-#include "limelight-common/Limelight.h"
+#include <Limelight.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -82,19 +83,24 @@ static void stream(PSERVER_DATA server, PCONFIGURATION config, enum platform sys
     exit(-1);
   }
 
-  gs_start_app(server, &config->stream, appId, config->sops, config->localaudio);
-
-  void *context = NULL;
-  #ifdef HAVE_SDL
-  if (system == SDL)
-    context = sdl_window;
-  #endif
+  int ret = gs_start_app(server, &config->stream, appId, config->sops, config->localaudio);
+  if (ret < 0) {
+    if (ret == GS_NOT_SUPPORTED_4K)
+      fprintf(stderr, "Server doesn't support 4K\n");
+    else
+      fprintf(stderr, "Errorcode starting app: %d\n", ret);
+    exit(-1);
+  }
 
   int drFlags = 0;
   if (config->fullscreen)
     drFlags |= DISPLAY_FULLSCREEN;
 
-  LiStartConnection(server->address, &config->stream, &connection_callbacks, platform_get_video(system), platform_get_audio(system), context, drFlags, server->serverMajorVersion);
+  if (config->forcehw)
+    drFlags |= FORCE_HARDWARE_ACCELERATION;
+
+  printf("Stream %d x %d, %d fps, %d kbps\n", config->stream.width, config->stream.height, config->stream.fps, config->stream.bitrate);
+  LiStartConnection(&server->serverInfo, &config->stream, &connection_callbacks, platform_get_video(system), platform_get_audio(system), NULL, drFlags);
 
   if (IS_EMBEDDED(system)) {
     evdev_start();
@@ -115,6 +121,7 @@ static void help() {
   printf("\n Actions\n\n");
   printf("\tmap\t\t\tCreate mapping file for gamepad\n");
   printf("\tpair\t\t\tPair device with computer\n");
+  printf("\tunpair\t\t\tUnpair device with computer\n");
   printf("\tstream\t\t\tStream computer to device\n");
   printf("\tlist\t\t\tList available games and applications\n");
   printf("\tquit\t\t\tQuit the application or game being streamed\n");
@@ -131,6 +138,8 @@ static void help() {
   printf("\t-60fps\t\t\tUse 60fps [default]\n");
   printf("\t-bitrate <bitrate>\tSpecify the bitrate in Kbps\n");
   printf("\t-packetsize <size>\tSpecify the maximum packetsize in bytes\n");
+  printf("\t-hevc\t\t\tUse the high efficiency video coding (HEVC)\n");
+  printf("\t-h264\t\t\tUse the advanced video coding (H264)\n");
   printf("\t-remote\t\t\tEnable remote optimizations\n");
   printf("\t-app <app>\t\tName of app to stream\n");
   printf("\t-nosops\t\t\tDon't allow GFE to modify game settings\n");
@@ -139,13 +148,14 @@ static void help() {
   printf("\t-keydir <directory>\tLoad encryption keys from directory\n");
   #ifdef HAVE_SDL
   printf("\n Video options (SDL Only)\n\n");
-  printf("\t-fullscreen\t\tMake window fullscreen\n");
+  printf("\t-windowed\t\tDisplay screen in a window\n");
   #endif
   #ifdef HAVE_EMBEDDED
   printf("\n I/O options\n\n");
   printf("\t-mapping <file>\t\tUse <file> as gamepad mapping configuration file (use before -input)\n");
   printf("\t-input <device>\t\tUse <device> as input. Can be used multiple times\n");
-  printf("\t-audio <device>\t\tUse <device> as ALSA audio output device (default sysdefault)\n");
+  printf("\t-audio <device>\t\tUse <device> as audio output device\n");
+  printf("\t-forcehw \t\tTry to use video hardware acceleration\n");
   #endif
   printf("\nUse Ctrl+Alt+Shift+Q to exit streaming session\n\n");
   exit(0);
@@ -159,6 +169,8 @@ static void pair_check(PSERVER_DATA server) {
 }
 
 int main(int argc, char* argv[]) {
+  printf("Moonlight Embedded %d.%d.%d (%s)\n", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, COMPILE_OPTIONS);
+
   CONFIGURATION config;
   config_parse(argc, argv, &config);
 
@@ -170,6 +182,7 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "Platform '%s' not found\n", config.platform);
     exit(-1);
   }
+  config.stream.supportsHevc = config.codec != CODEC_H264 && (config.codec == CODEC_HEVC || platform_supports_hevc(system));
   
   if (strcmp("map", config.action) == 0) {
     if (config.address == NULL) {
@@ -191,6 +204,7 @@ int main(int argc, char* argv[]) {
       exit(-1);
     }
     config.address[0] = 0;
+    printf("Searching for server...\n");
     gs_discover_server(config.address);
     if (config.address[0] == 0) {
       fprintf(stderr, "Autodiscovery failed. Specify an IP address next time.\n");
@@ -204,18 +218,26 @@ int main(int argc, char* argv[]) {
     config_file_parse(host_config_file, &config);
 
   SERVER_DATA server;
-  server.address = config.address;
+  printf("Connect to %s...\n", config.address);
+
   int ret;
-  if ((ret = gs_init(&server, config.key_dir)) == GS_OUT_OF_MEMORY) {
+  if ((ret = gs_init(&server, config.address, config.key_dir)) == GS_OUT_OF_MEMORY) {
     fprintf(stderr, "Not enough memory\n");
     exit(-1);
   } else if (ret == GS_INVALID) {
     fprintf(stderr, "Invalid data received from server: %s\n", config.address, gs_error);
     exit(-1);
+  } else if (ret == GS_UNSUPPORTED_VERSION) {
+    if (!config.unsupported_version) {
+      fprintf(stderr, "Unsupported version: %s\n", gs_error);
+      exit(-1);
+    }
   } else if (ret != GS_OK) {
     fprintf(stderr, "Can't connect to server %s\n", config.address);
     exit(-1);
   }
+
+  printf("NVIDIA %s, GFE %s (protocol version %d)\n", server.gpuType, server.serverInfo.serverInfoGfeVersion, server.serverMajorVersion);
 
   if (strcmp("list", config.action) == 0) {
     pair_check(&server);
@@ -223,8 +245,10 @@ int main(int argc, char* argv[]) {
   } else if (strcmp("stream", config.action) == 0) {
     pair_check(&server);
     if (IS_EMBEDDED(system)) {
-      for (int i=0;i<config.inputsCount;i++)
+      for (int i=0;i<config.inputsCount;i++) {
+        printf("Add input %s (mapping %s)...\n", config.inputs[i].path, config.inputs[i].mapping);
         evdev_create(config.inputs[i].path, config.inputs[i].mapping);
+      }
 
       udev_init(!inputAdded, config.mapping);
       evdev_init();
@@ -246,6 +270,12 @@ int main(int argc, char* argv[]) {
       fprintf(stderr, "Failed to pair to server: %s\n", gs_error);
     } else {
       printf("Succesfully paired\n");
+    }
+  } else if (strcmp("unpair", config.action) == 0) {
+    if (gs_unpair(&server) != GS_OK) {
+      fprintf(stderr, "Failed to unpair to server: %s\n", gs_error);
+    } else {
+      printf("Succesfully unpaired\n");
     }
   } else if (strcmp("quit", config.action) == 0) {
     pair_check(&server);

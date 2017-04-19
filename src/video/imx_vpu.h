@@ -1,7 +1,7 @@
 /*
  * This file is part of Moonlight Embedded.
  *
- * Copyright (C) 2015 Iwan Timmer
+ * Copyright (C) 2017 Iwan Timmer
  *
  * Moonlight is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,20 +17,23 @@
  * along with Moonlight; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdbool.h>
-
 #include <Limelight.h>
 
-extern const char* audio_device;
+#include <stdbool.h>
 
-extern AUDIO_RENDERER_CALLBACKS audio_callbacks_alsa;
-#ifdef HAVE_SDL
-extern AUDIO_RENDERER_CALLBACKS audio_callbacks_sdl;
-#endif
-#ifdef HAVE_PULSE
-extern AUDIO_RENDERER_CALLBACKS audio_callbacks_pulse;
-bool audio_pulse_init();
-#endif
-#ifdef HAVE_PI
-extern AUDIO_RENDERER_CALLBACKS audio_callbacks_omx;
-#endif
+#include <sys/types.h>
+
+struct vpu_buf {
+  void *start;
+  off_t offset;
+  size_t length;
+};
+
+bool vpu_init();
+void vpu_setup(struct vpu_buf* buffers[], int bufferCount, int stride, int height);
+
+bool vpu_decode(PDECODE_UNIT decodeUnit);
+int vpu_get_frame();
+void vpu_clear(int disp_clr_index);
+
+void vpu_cleanup();

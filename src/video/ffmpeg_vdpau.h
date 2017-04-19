@@ -1,7 +1,7 @@
 /*
  * This file is part of Moonlight Embedded.
  *
- * Copyright (C) 2015 Iwan Timmer
+ * Based on Moonlight Pc implementation
  *
  * Moonlight is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,20 +17,7 @@
  * along with Moonlight; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdbool.h>
+#include <libavcodec/avcodec.h>
 
-#include <Limelight.h>
-
-extern const char* audio_device;
-
-extern AUDIO_RENDERER_CALLBACKS audio_callbacks_alsa;
-#ifdef HAVE_SDL
-extern AUDIO_RENDERER_CALLBACKS audio_callbacks_sdl;
-#endif
-#ifdef HAVE_PULSE
-extern AUDIO_RENDERER_CALLBACKS audio_callbacks_pulse;
-bool audio_pulse_init();
-#endif
-#ifdef HAVE_PI
-extern AUDIO_RENDERER_CALLBACKS audio_callbacks_omx;
-#endif
+int vdpau_init(AVCodecContext* decoder_ctx, int width, int height);
+AVFrame* vdpau_get_frame(AVFrame* dec_frame);
