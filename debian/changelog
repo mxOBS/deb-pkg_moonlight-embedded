@@ -1,3 +1,10 @@
+moonlight-embedded (2.3.0) stable; urgency=medium
+
+  * Non-maintainer upload.
+  * bump version
+
+ -- Iwan Timmer <irtimmer@gmail.com>  Wed, 19 Apr 2017 16:29:32 +0000
+
 moonlight-embedded (2.1.1) RELEASED; urgency=high
 
   * Update to version 2.1.1
