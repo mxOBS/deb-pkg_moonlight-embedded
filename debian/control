@@ -1,0 +1,34 @@
+Source: moonlight-embedded
+Section: games
+Priority: extra
+Maintainer: Iwan Timmer <irtimmer@gmail.com>
+Build-Depends:
+ debhelper (>= 8.0.0),
+ cmake (>= 2.8.11),
+ libasound2-dev,
+ libopus-dev,
+ libvpu-imx6-dev,
+ libv4l-dev,
+ imx-kernel-api,
+ libevdev-dev,
+ libudev-dev,
+ libsdl2-dev (>= 2.0.4),
+ libavcodec-dev,
+ libavutil-dev,
+ libpulse-dev,
+ libcurl4-openssl-dev,
+ libssl-dev,
+ libexpat1-dev,
+ libavahi-client-dev,
+ libenet-dev
+Standards-Version: 3.9.3
+Homepage: https://github.com/irtimmer/moonlight-embedded
+
+Package: moonlight-embedded
+Architecture: armhf
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends}
+Description: GameStream client for Linux
+ Game streaming client for Nvidia's GameStream.
+ Stream games from your Windows computer with Nvidia graphic card to your linux box.
